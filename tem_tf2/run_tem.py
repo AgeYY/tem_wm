@@ -92,6 +92,10 @@ train_dict = data_utils.get_initial_data_dict(params)
 msg = 'Training Started'
 logger_sums.info(msg)
 logger_envs.info(msg)
+
+# Add total training time tracking
+total_start_time = time.time()
+
 for train_i in range(params.train_iters):
     # INITIALISE ENVIRONMENT AND INPUT VARIABLES
     if sum(train_dict.env_steps == 0) > 0:
@@ -180,7 +184,10 @@ for train_i in range(params.train_iters):
     #    model.save(model_path + '/tem_' + str(train_i))
 if profile:
     tf.profiler.experimental.stop()
-print('Finished training')
+
+# Calculate and print total training time
+total_training_time = time.time() - total_start_time
+print(f'Finished training in {total_training_time:.2f} seconds ({total_training_time/60:.2f} minutes)')
 
 
 def check_inputs_modified(x, y):

@@ -1,5 +1,5 @@
 # TF 2.4.0 with CUDA 11.0 + cuDNN 8.0 pre-installed
-FROM tensorflow/tensorflow:2.4.0-gpu
+FROM tensorflow/tensorflow:2.10.0-gpu
 
 # Avoid interactive tz prompts, speed up installs
 ENV DEBIAN_FRONTEND=noninteractive PIP_NO_CACHE_DIR=1
@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive PIP_NO_CACHE_DIR=1
 #     git build-essential && rm -rf /var/lib/apt/lists/*
 
 # Copy your Python deps
-WORKDIR /generalising-structural-knowledge
+WORKDIR /work/
 COPY requirements.txt .
 
 # Install Python deps
