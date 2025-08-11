@@ -1,0 +1,10 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Windows Zone.Identifier alternate data streams
+*.Zone.Identifier
+
+# Optional: Ignore Mac Finder files if you ever transfer from macOS
+.DS_Store
