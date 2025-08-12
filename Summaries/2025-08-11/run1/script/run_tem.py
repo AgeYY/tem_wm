@@ -20,36 +20,11 @@ import shutil
 import tem_model as tem
 import time
 import importlib
-import argparse
 
 importlib.reload(tem)
 
-parser = argparse.ArgumentParser(description='Train TEM')
-parser.add_argument('--fast', action='store_true', help='Use a smaller, low-memory configuration')
-parser.add_argument('--batch-size', type=int, default=None, help='Override batch size')
-parser.add_argument('--seq-len', type=int, default=None, help='Override sequence length')
-parser.add_argument('--world', type=str, default=None, help='Override world type (e.g., rectangle)')
-args, _ = parser.parse_known_args()
-
 # Create directories for storing all information about the current run
 run_path, train_path, model_path, save_path, script_path, envs_path = data_utils.make_directories()
-
-# def print_var_info(name, var):
-#     tname = type(var).__name__
-#     if isinstance(var, (np.ndarray, tf.Tensor)):
-#         print(f"{name}: type={tname}, shape={tuple(var.shape)}")
-#     elif isinstance(var, str):
-#         print(f"{name}: type={tname}, value={var}")
-#     else:
-#         print(f"{name}: type={tname}")
-
-# print_var_info("run_path", run_path)
-# print_var_info("train_path", train_path)
-# print_var_info("model_path", model_path)
-# print_var_info("save_path", save_path)
-# print_var_info("script_path", script_path)
-# print_var_info("envs_path", envs_path)
-
 # Save all python files in current directory to script directory
 files = glob.iglob(os.path.join('', '*.py'))
 for file in files:
@@ -57,71 +32,7 @@ for file in files:
         shutil.copy2(file, os.path.join(script_path, file))
 
 # Initialise hyper-parameters for model
-world_override = args.world if args.world else ('rectangle' if args.fast else None)
-params = parameters.default_params(world_type=world_override, batch_size=args.batch_size)
-
-if args.fast:
-    # Smaller data/model settings for lower memory
-    params.batch_size = params.batch_size if args.batch_size else 2
-    params.n_envs = params.batch_size
-    params.seq_len = args.seq_len if args.seq_len else 25
-    params.tf_range = True  # tf.range uses less RAM
-    params.use_reward = False
-
-    # Reduce sensory and model sizes
-    params.s_size_comp = 6
-    # Recompute sensory alphabet size and two-hot table/matrix
-    s_size_fast = len(parameters.combins_table(params.s_size_comp, 2))
-    params.s_size = s_size_fast
-    params.two_hot_mat = parameters.onehot2twohot(
-        np.expand_dims(np.eye(params.s_size), axis=0),
-        parameters.combins_table(params.s_size_comp, 2),
-        params.s_size_comp,
-    )
-
-    # Smaller grid/place sizes and fewer frequencies
-    params.n_grids_all = [12, 9, 6]
-    params.grid2phase = 3
-    params.n_phases_all = [int(n_grid / params.grid2phase) for n_grid in params.n_grids_all]
-    params.tot_phases = sum(params.n_phases_all)
-    params.n_freq = len(params.n_phases_all)
-    params.g_size = sum(params.n_grids_all)
-    params.n_place_all = [p * params.s_size_comp for p in params.n_phases_all]
-    params.p_size = sum(params.n_place_all)
-    params.s_size_comp_hidden = 10 * params.s_size_comp
-    params.prediction_freq = 0
-    params.freqs = sorted([0.01, 0.7, 0.91, 0.97, 0.99, 0.9995])[:params.n_freq]
-
-    # Smaller MLP for transition and input
-    params.d_mixed_size = 10
-
-    # Fewer envs saved for summaries
-    params.n_envs_save = min(params.n_envs_save, 2)
-
-    # Rebuild masks/connectivity for new shapes
-    params.R_f_F = parameters.connectivity_matrix(parameters.conn_hierarchical, params.freqs)
-    params.R_f_F_inv = parameters.connectivity_matrix(parameters.conn_all2all, params.freqs)
-    params.mask_p = parameters.get_mask(params.n_place_all, params.n_place_all,
-                                        parameters.transpose_connectivity(params.R_f_F))
-    params.R_G_F_f = parameters.connectivity_matrix(parameters.conn_hierarchical, params.freqs)
-    params.mask_g = parameters.get_mask(params.n_grids_all, params.n_grids_all, params.R_G_F_f)
-    params.n_recurs = params.n_freq
-    params.max_attractor_its = [params.n_recurs - f for f in range(params.n_freq)]
-    params.max_attractor_its_inv = [params.n_recurs for _ in range(params.n_freq)]
-    params.attractor_freq_iterations = [[f for f in range(params.n_freq) if r < params.max_attractor_its[f]]
-                                        for r in range(params.n_recurs)]
-    params.attractor_freq_iterations_inv = [[f for f in range(params.n_freq) if r < params.max_attractor_its_inv[f]]
-                                            for r in range(params.n_recurs)]
-    params.R_f_F_ = [list(np.where(x[:params.n_freq])[0]) for x in params.R_f_F]
-    params.R_f_F_inv_ = [list(np.where(x[:params.n_freq])[0]) for x in params.R_f_F_inv]
-
-    # Adjust training steps/summaries
-    params.train_iters = min(params.train_iters, 5000)
-    params.sum_int = max(50, params.sum_int)
-    params.sum_int_inferences = max(200, params.sum_int_inferences)
-
-    # Re-derive environment-specific params for possibly changed world
-    params = parameters.get_env_params(params, width=None, height=None)
+params = parameters.default_params()
 # Save parameters
 np.save(os.path.join(save_path, 'params'), dict(params))
 
@@ -176,8 +87,7 @@ def test_step(model_, model_inputs_):
 
 
 # initialise dictionary to contain environments and data info
-train_dict = data_utils.get_initial_data_dict(params) # keys: two_hot_table, env_steps, curric_env, hebb, variables, walk_data, bptt_data
-# two_hot_table: a list of tuples. Each tuple is a array with all zeros except two ones. I guess this is the sensory stimulus.
+train_dict = data_utils.get_initial_data_dict(params)
 
 msg = 'Training Started'
 logger_sums.info(msg)

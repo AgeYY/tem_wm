@@ -352,7 +352,7 @@ def prepare_input(data_dict, pars, start_i=None):
     xs, edge_visits, s_visited, inference_opportunity = new_data
 
     # get 2-hot encoding
-    xs_two_hot = parameters.onehot2twohot(xs, data_dict.two_hot_table, pars.s_size_comp) # mapping from one-hot observations xs to two-hot embeddings
+    xs_two_hot = parameters.onehot2twohot(xs, data_dict.two_hot_table, pars.s_size_comp)
     # model input data
     data_dict.inputs = model_utils.DotDict({'xs': xs,
                                             'x_s': data_dict.variables.x_s,
@@ -381,16 +381,6 @@ def prepare_input(data_dict, pars, start_i=None):
 
 def get_initial_data_dict(pars):
     # prepare_environment_data
-    # s_size_comp: length of the two-hot sensory embedding.
-    # s_size: possible two-hot sensory embeddings. For example, if s_size_comp = 10, then s_size = C(10, 2) = 45.
-    # two_hot_table: (s_size_comp, 2). a list of tuples. Each tuple is a array with all zeros except two ones.
-    # xs: shape (batch_size, one-hot embedding = s_size, seq_len).
-    # env_steps: (batch_size,). List of integers. Each row of a batch is a "trial" in an environment. env_steps[i] tracks the number of steps in the current environment.
-    # curric_env: a dictionary containing information about the current environment.
-    # curric_env.envs: (batch_size,). List of environments (objects, e.g. Frank2000).
-    # curric_env.n_restart: scalar that decays over time; used to set expected walk lengths.
-    # curric_env.walk_len: (batch_size,). List of integers. Chosen walk length (in steps) for each env, rounded to a multiple of pars.seq_len.
-    # states_mat, adjs, trans: (batch_size, max_states). placeholders for environment graph/state info (filled by env's world()/state_data())
     data_dict = model_utils.DotDict({'two_hot_table': parameters.combins_table(pars.s_size_comp, 2),
                                      'env_steps': np.zeros(pars.batch_size).astype(int),
                                      'curric_env':

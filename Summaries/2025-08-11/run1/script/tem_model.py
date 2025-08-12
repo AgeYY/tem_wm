@@ -141,8 +141,6 @@ class TEM(tf.keras.Model):
 
     @model_utils.define_scope
     def step(self, inputs, g_t, x_t, variable_dict, memories_dict, i, t_mat, mem_offset=0):
-        # x_t: sensory state accumulated over time.
-        # inputs.x_two_hot[i]: one-hot encoding of sensory at current time-step.
         # with tf.range and in graph mode, can't make the 'i' variable a global. So pass seq_pos, and i
         seq_pos = inputs.seq_i * self.par.seq_len + tf.cast(i, self.precision)
 
@@ -958,7 +956,7 @@ def compute_losses(model_inputs, data, trainable_variables, par):
     lg_reg = 0.0
     lp_reg = 0.0
 
-    xs = model_inputs.x # Let's say this is observation.
+    xs = model_inputs.x
     scalings = model_inputs.scalings
     s_visited = model_inputs.s_visited
     positions = model_inputs.positions

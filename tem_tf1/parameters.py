@@ -12,12 +12,12 @@ import numpy as np
 def default_params():
     params = dict()
 
-    params['batch_size'] = 16
-    params['BPTT_truncation'] = 25  # 100 for loop_laps world
+    params['batch_size'] = 4
+    params['BPTT_truncation'] = 10  # 100 for loop_laps world
 
     # ENVIRONMENT PARAMS
 
-    params['world_type'] = 'hex'  # 'hex', 'square', 'family_tree', 'line_ti', 'loop_laps', 'rectangle'
+    params['world_type'] = 'square'  # 'hex', 'square', 'family_tree', 'line_ti', 'loop_laps', 'rectangle'
     params['hex_boundary'] = True  # give hexagonal boundary to hex worlds
     params['n_envs'] = params['batch_size']
     params['diff_env_batches_envs'] = np.arange(params['batch_size'])  # which batch in which environment
@@ -52,7 +52,7 @@ def default_params():
     # DATA / SAVE / SUMMARY PARAMS PARAMS
 
     params['seq_len'] = params['BPTT_truncation']
-    params['s_size'] = 45
+    params['s_size'] = 9
     params['restart_max'] = np.ceil(6000 / params['seq_len']).astype(int)
     params['restart_min'] = np.ceil(2500 / params['seq_len']).astype(int)
     params['seq_jitter'] = np.ceil(200 / params['seq_len']).astype(int)
@@ -83,7 +83,7 @@ def default_params():
         params['infer_g_type'] += '_x'
 
     params['two_hot'] = True
-    params['s_size_comp'] = 10
+    params['s_size_comp'] = 2
     params['no_direc_gen'] = True if 'shiny' in params['poss_behaviours'] else False
 
     # numbers of variables for each frequency
@@ -263,7 +263,8 @@ def get_n_states(pars):
         n_actions = 6
 
     elif world_type == 'square':
-        poss_widths = [10, 10, 11, 11, 8, 9, 10, 11, 8, 9, 10, 11, 8, 8, 9, 9]
+        # poss_widths = [10, 10, 11, 11, 8, 9, 10, 11, 8, 9, 10, 11, 8, 8, 9, 9]
+        poss_widths = [4, 4, 5, 5, 3, 3, 4, 4, 3, 5, 5, 4, 3, 4, 3, 5]
         n_states = [x ** 2 for x in poss_widths]
         n_actions = 4
 
