@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Minimal training demo for TEM on a tiny Rectangle environment (TF2).
-
-This script mirrors the simplicity of `env_test.py`, but adds a very small
-training loop to show how to optimise TEM end-to-end without the full
-training pipeline.
+Evaluate a trained TEM model (TF2) on a Rectangle environment and print
+per-step predictions alongside ground-truth sensory stimuli and positions.
 
 Example:
-  python tem_tf2/train_demo.py --width 6 --height 5 --steps 40 --iters 200 --fast --seed 0
+  python tem_tf2/eval_saved_tem.py --weights ./train_demo_weights.h5 --width 6 --height 5 --steps 40 --fast --seed 0
 
 Notes:
-- Uses a single environment sequence per batch (no dataset/loader).
-- Keeps the model small in --fast mode so it runs quickly on CPU.
-- Updates the re-input state (x_s, g, Hebbian) between steps like the full trainer.
+- The architecture depends on the 'fast' flag. Use the same setting as used for training.
+- Defaults mirror the minimal demo in train_demo.py.
 """
 
 from __future__ import annotations
@@ -23,7 +19,6 @@ from typing import Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
-import os
 
 import parameters
 from parameters import (
@@ -33,12 +28,8 @@ from parameters import (
     get_scaling_parameters,
 )
 from environments import Rectangle, sample_data
-from tem_model import TEM, compute_losses
+from tem_model import TEM
 import model_utils
-
-# import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = ""
-
 
 def build_fast_params(width: int, height: int, batch_size: int, steps: int, fast: bool) -> object:
     par = default_params(width=width, height=height, world_type='rectangle', batch_size=batch_size)
@@ -118,7 +109,6 @@ def build_batch_rectangle_envs(
 
     return positions_b, actions_b, envs
 
-
 def make_inputs_from_walk(
     par, envs: list[Rectangle], positions_b: np.ndarray, actions_b: np.ndarray
 ) -> Tuple[model_utils.DotDict, model_utils.DotDict]:
@@ -129,8 +119,8 @@ def make_inputs_from_walk(
 
     xs_two_hot = onehot2twohot(xs, combins_table(par.s_size_comp, 2), par.s_size_comp).astype(np.float32)
 
-    x_s_init = np.zeros((batch_size, par.s_size_comp * par.n_freq), dtype=np.float32) # temporally filtered sensory state. x^f_c in the paper.
-    gs_init = np.zeros((batch_size, par.g_size), dtype=np.float32) # g code, from model's returned re_input.g
+    x_s_init = np.zeros((batch_size, par.s_size_comp * par.n_freq), dtype=np.float32)
+    gs_init = np.zeros((batch_size, par.g_size), dtype=np.float32)
 
     seq_index = np.zeros(batch_size, dtype=np.float32)
     s_visited = np.ones((batch_size, steps), dtype=np.float32)
@@ -162,111 +152,57 @@ def make_inputs_from_walk(
     return inputs_np, hebb
 
 
-def train_once(model: TEM, inputs_tf, par, optimizer: tf.keras.optimizers.Optimizer):
-    with tf.GradientTape() as tape:
-        variables, re_input = model(inputs_tf, training=True)
-        losses = compute_losses(inputs_tf, variables, model.trainable_variables, par)
-    grads = tape.gradient(losses.train_loss, model.trainable_variables)
-    capped_grads = [tf.clip_by_norm(g, 2.0) if g is not None else None for g in grads]
-    optimizer.apply_gradients([(g, v) for g, v in zip(capped_grads, model.trainable_variables) if g is not None])
-    return variables, re_input, losses
-
-
-def accuracy_from_preds(xs_t, preds, par) -> Tuple[float, float, float]:
-    accs = model_utils.compute_accuracies(xs_t, preds, par)
-    return float(accs['p']), float(accs['g']), float(accs['gt'])
-
-
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description='Minimal TEM training demo')
+    p = argparse.ArgumentParser(description='Evaluate TEM on a Rectangle environment with saved weights')
+    p.add_argument('--weights', type=str, default='./train_demo_weights.h5', help='Path to saved weights (.h5)')
     p.add_argument('--width', type=int, default=2)
     p.add_argument('--height', type=int, default=2)
     p.add_argument('--steps', type=int, default=10)
-    p.add_argument('--batch-size', type=int, default=2)
-    p.add_argument('--iters', type=int, default=20)
-    p.add_argument('--lr', type=float, default=0.1)
+    p.add_argument('--batch-size', type=int, default=1)
     p.add_argument('--fast', action='store_true')
     p.add_argument('--torus', action='store_true')
     p.add_argument('--seed', type=int, default=None)
-    p.add_argument('--save', type=str, default=None, help='Optional path prefix to save model weights')
-    p.add_argument('--save-model', type=str, default=None,
-                   help='Optional path to save the full model (directory for SavedModel or .h5 file)')
     return p.parse_args(argv)
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = parse_args(argv)
 
-    # Build params (fast keeps things tiny for quick demo runs)
     par = build_fast_params(args.width, args.height, args.batch_size, args.steps, args.fast)
     tf.keras.backend.set_floatx('float32')
     par.precision = model_utils.precision
 
-    # Build a small batch of environments and a single walk per env
     positions_b, actions_b, envs = build_batch_rectangle_envs(
         args.batch_size, args.width, args.height, args.steps, args.seed, args.torus, par
     )
 
-    # Construct initial inputs and Hebbian state
     inputs_np, hebb = make_inputs_from_walk(par, envs, positions_b, actions_b)
 
-    # Build model and optimiser
     model = TEM(par)
-    optimizer = tf.keras.optimizers.Adam(learning_rate=args.lr)
 
-    # Training loop
-    printed_param_count = False
-    for it in range(args.iters):
-        scalings = get_scaling_parameters(it, par)
-        inputs_tf = model_utils.inputs_2_tf(inputs_np, hebb, scalings, par.n_freq)
+    scalings = get_scaling_parameters(0, par)
+    inputs_tf = model_utils.inputs_2_tf(inputs_np, hebb, scalings, par.n_freq)
 
-        variables, re_input, losses = train_once(model, inputs_tf, par, optimizer)
+    _ = model(inputs_tf, training=False)
+    model.load_weights(args.weights)
 
-        if not printed_param_count:
-            try:
-                param_count = int(np.sum([np.prod(v.shape) for v in model.trainable_variables]))
-                print(f"Trainable parameters (TEM): {param_count:,}")
-            except Exception:
-                pass
-            printed_param_count = True
+    variables, _ = model(inputs_tf, training=False)
 
-        # Update re-input state (keeps filtered sensory, grids, and Hebbian)
-        re_np = model_utils.tf2numpy(re_input)
-        inputs_np.x_s = re_np.x_s
-        inputs_np.gs = re_np.g
-        hebb.a_rnn = re_np.a_rnn
-        hebb.a_rnn_inv = re_np.a_rnn_inv
+    xs_t = inputs_tf.x.numpy()  # (T, B, s_size)
+    positions_t = inputs_tf.positions.numpy()  # (T, B)
 
-        # if (it + 1) % max(1, args.iters // 10) == 0 or it == 0:
-        if True:
-            xs_t = model_utils.inputs_2_tf(inputs_np, hebb, scalings, par.n_freq).x
-            acc_p, acc_g, acc_gt = accuracy_from_preds(xs_t, variables.pred, par)
-            print(
-                f"iter={it+1:04d} loss={float(losses.train_loss):.4f} "
-                f"lx_p={float(getattr(losses, 'lx_p', 0.0)):.4f} "
-                f"lx_g={float(getattr(losses, 'lx_g', 0.0)):.4f} "
-                f"lx_gt={float(getattr(losses, 'lx_gt', 0.0)):.4f} "
-                f"acc_p={acc_p:.2f} acc_g={acc_g:.2f} acc_gt={acc_gt:.2f}"
-            )
+    preds_xp = [t.numpy() for t in variables.pred.x_p]  # list length T of (B, s_size)
 
-    # Optional save
-    if args.save:
-        model.save_weights(args.save)
-        print(f"Saved weights to {args.save}")
+    T = len(preds_xp)
+    B = preds_xp[0].shape[0]
 
-    if args.save_model:
-        # Ensure model has been called (built) already; it has during training
-        model.save(args.save_model)
-        print(f"Saved full model to {args.save_model}")
-        # Also store parameters for exact reproduction
-        try:
-            os.makedirs(args.save_model, exist_ok=True) if not args.save_model.endswith('.h5') else None
-            params_out = args.save_model if args.save_model.endswith('.h5') else os.path.join(args.save_model, 'params.npy')
-            if params_out.endswith('.npy'):
-                np.save(params_out, dict(par), allow_pickle=True)
-                print(f"Saved parameters to {params_out}")
-        except Exception as e:
-            print(f"Warning: failed to save parameters next to model: {e}")
+    for b in range(B):
+        print(f"Batch {b}:")
+        for t in range(T):
+            pred_label = int(np.argmax(preds_xp[t][b]))
+            gt_label = int(np.argmax(xs_t[t, b]))
+            pos = int(positions_t[t, b])
+            print(f"t={t:02d} pred_sense={pred_label} gt_sense={gt_label} pos={pos}")
 
     return 0
 

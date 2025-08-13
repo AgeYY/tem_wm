@@ -232,7 +232,7 @@ class TEM(tf.keras.Model):
                                                                             dtype=self.precision)
 
         mem_a = memories_dict['gen']['a'] * forget_vec
-        mem_b = memories_dict['gen']['b']
+        mem_b = memories_dict['gen']['b'] # 
 
         h_mat_new = h_mat * forget_mat + tf.matmul(mem_b, tf.transpose(mem_a, perm=(0, 2, 1))) * self.mask
         h_mat_new_ = tf.clip_by_value(h_mat_new, -self.par.hebb_lim, self.par.hebb_lim, name='h_mat')
